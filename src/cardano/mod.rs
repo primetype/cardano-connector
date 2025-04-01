@@ -100,7 +100,7 @@ pub fn sumup<'a>(outputs: impl IntoIterator<Item = &'a TransactionOutput>) -> Va
                     coin += c;
 
                     for (cert, asset) in multiasset.iter() {
-                        let entry = assets.entry(cert.clone()).or_default();
+                        let entry = assets.entry(*cert).or_default();
 
                         for (asset_name, amount) in asset.iter() {
                             entry
@@ -121,7 +121,7 @@ pub fn sumup<'a>(outputs: impl IntoIterator<Item = &'a TransactionOutput>) -> Va
                     coin += c;
 
                     for (cert, asset) in multiasset.iter() {
-                        let entry = assets.entry(cert.clone()).or_default();
+                        let entry = assets.entry(*cert).or_default();
 
                         for (asset_name, amount) in asset.iter() {
                             entry

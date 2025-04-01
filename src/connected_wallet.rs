@@ -19,13 +19,13 @@ pub enum NetworkId {
     Mainnet,
     Unknown(u8),
 }
-impl Into<u8> for NetworkId {
-    fn into(self) -> u8 {
-        match self {
-            Self::PreProduction => 0,
-            Self::Preview => 0,
-            Self::Mainnet => 1,
-            Self::Unknown(n) => n,
+impl From<NetworkId> for u8 {
+    fn from(network_id: NetworkId) -> Self {
+        match network_id {
+            NetworkId::PreProduction => 0,
+            NetworkId::Preview => 0,
+            NetworkId::Mainnet => 1,
+            NetworkId::Unknown(n) => n,
         }
     }
 }

@@ -20,7 +20,7 @@ pub fn wallets() -> Vec<Wallet> {
     ffi::cip30::WALLETS.with(|wallets| {
         let mut vec = Vec::new();
 
-        for element in js_sys::Object::values(&wallets) {
+        for element in js_sys::Object::values(wallets) {
             let cip30_wallet = ffi::Cip30Wallet::from(element);
             let wallet = Wallet { cip30_wallet };
 
