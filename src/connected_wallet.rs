@@ -33,7 +33,7 @@ impl From<NetworkId> for u8 {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Address(String);
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct ConnectedWallet {
     wallet: Wallet,
     cip30_api: cip30_api::Cip30Api,
