@@ -38,3 +38,6 @@ transaction = ["pallas-txbuilder"]
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+[dev-dependencies]
+anyhow = "1.0.97"

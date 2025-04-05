@@ -13,7 +13,10 @@ pub enum APIErrorCode {
     Unknown(i64),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, thiserror::Error, serde::Deserialize,
+)]
+#[error("{code}. {info}.")]
 pub struct APIError {
     pub code: APIErrorCode,
     pub info: String,
