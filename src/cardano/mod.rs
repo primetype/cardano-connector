@@ -18,7 +18,7 @@ use thiserror::Error;
 
 /// decode the CBOR encoded UTxO as returned from the CIP30 getUtxos
 /// API.
-#[derive(Debug, Clone, pallas_codec::minicbor::Decode)]
+#[derive(Debug, PartialEq, Eq, Clone, pallas_codec::minicbor::Decode)]
 #[cbor(array)]
 pub struct Utxo {
     #[n(0)]
