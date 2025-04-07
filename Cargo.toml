@@ -3,7 +3,6 @@ name = "cardano-connector"
 version = "0.1.6"
 authors = ["Nicolas Di Prima <nicolas@primetype.co.uk>"]
 edition = "2024"
-rust-version = "1.85.1"
 description = "Platform for implementing Cardano Wallet connector to run in web browsers."
 readme = "README.md"
 repository = "https://github.com/primetype/cardano-connector"
