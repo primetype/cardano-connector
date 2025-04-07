@@ -1,6 +1,4 @@
-#[cfg(feature = "transaction")]
 use crate::Address;
-use pallas_addresses::Address;
 use pallas_codec::minicbor;
 #[cfg(feature = "transaction")]
 use pallas_primitives::babbage::PseudoPostAlonzoTransactionOutput;
@@ -106,9 +104,9 @@ pub fn group_utxos<'a>(
         }
     }
 
-    let address = to.to_bytes();
+    let address = to.to_vec();
     let output = PseudoPostAlonzoTransactionOutput {
-        address,
+        address: address.into(),
         value,
         datum_option: None,
         script_ref: None,

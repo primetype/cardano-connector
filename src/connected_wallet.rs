@@ -1,9 +1,5 @@
-use core::fmt;
-
-use pallas_primitives::Bytes;
-
 use crate::{
-    Wallet,
+    Address, Wallet,
     cardano::{Coin, Hash, TransactionBody, Tx, Utxo, Value, WitnessSet},
     error::{APIError, APIErrorCode, PaginateError},
     ffi::{
@@ -11,6 +7,7 @@ use crate::{
         cip30_api::{self, Paginate},
     },
 };
+use core::fmt;
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum NetworkId {
@@ -30,25 +27,10 @@ impl From<NetworkId> for u8 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct Address(String);
-
 #[derive(Clone, PartialEq)]
 pub struct ConnectedWallet {
     wallet: Wallet,
     cip30_api: cip30_api::Cip30Api,
-}
-
-impl Address {
-    pub fn to_bytes(&self) -> Bytes {
-        hex::decode(&self.0).unwrap().into()
-    }
-}
-
-impl fmt::Display for Address {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        <String as fmt::Display>::fmt(&self.0, f)
-    }
 }
 
 impl fmt::Display for NetworkId {
@@ -188,7 +170,11 @@ impl ConnectedWallet {
                             info: format!("Invalid address: {address:?}"),
                         });
                     };
-                    unused_addresses.push(Address(address));
+                    let address = Address::from_hex(&address).map_err(|err| APIError {
+                        code: APIErrorCode::InternalError,
+                        info: err.to_string(),
+                    })?;
+                    unused_addresses.push(address);
                 }
                 Ok(unused_addresses)
             }
@@ -213,7 +199,11 @@ impl ConnectedWallet {
                             info: format!("Invalid address: {address:?}"),
                         });
                     };
-                    unused_addresses.push(Address(address));
+                    let address = Address::from_hex(&address).map_err(|err| APIError {
+                        code: APIErrorCode::InternalError,
+                        info: err.to_string(),
+                    })?;
+                    unused_addresses.push(address);
                 }
                 Ok(unused_addresses)
             }
@@ -236,8 +226,11 @@ impl ConnectedWallet {
                         info: format!("Invalid address: {address:?}"),
                     });
                 };
-
-                Ok(Address(address))
+                let address = Address::from_hex(&address).map_err(|err| APIError {
+                    code: APIErrorCode::InternalError,
+                    info: err.to_string(),
+                })?;
+                Ok(address)
             }
             Err(error) => serde_wasm_bindgen::from_value(error)
                 .map_err(|decode_error| APIError {
@@ -260,7 +253,11 @@ impl ConnectedWallet {
                             info: format!("Invalid address: {address:?}"),
                         });
                     };
-                    unused_addresses.push(Address(address));
+                    let address = Address::from_hex(&address).map_err(|err| APIError {
+                        code: APIErrorCode::InternalError,
+                        info: err.to_string(),
+                    })?;
+                    unused_addresses.push(address);
                 }
                 Ok(unused_addresses)
             }
