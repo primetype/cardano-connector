@@ -19,6 +19,7 @@ categories = [
 [dependencies]
 hex = { version = "0.4" }
 js-sys = "0.3.77"
+pallas-addresses = "0.32.0"
 pallas-codec = "0.32"
 pallas-primitives = "0.32"
 pallas-txbuilder = { version = "0.32", optional = true }

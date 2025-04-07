@@ -1,5 +1,6 @@
 #[cfg(feature = "transaction")]
 use crate::Address;
+use pallas_addresses::Address;
 use pallas_codec::minicbor;
 #[cfg(feature = "transaction")]
 use pallas_primitives::babbage::PseudoPostAlonzoTransactionOutput;
@@ -49,10 +50,10 @@ impl Utxo {
         }
     }
 
-    pub fn address(&self) -> String {
+    pub fn address(&self) -> Result<Address, pallas_addresses::Error> {
         match &self.output {
-            TransactionOutput::Legacy(output) => output.address.to_string(),
-            TransactionOutput::PostAlonzo(output) => output.address.to_string(),
+            TransactionOutput::Legacy(output) => Address::from_bytes(&output.address),
+            TransactionOutput::PostAlonzo(output) => Address::from_bytes(&output.address),
         }
     }
 }
