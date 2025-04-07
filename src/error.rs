@@ -22,8 +22,11 @@ pub struct APIError {
     pub info: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, thiserror::Error, serde::Deserialize,
+)]
 #[serde(rename_all = "camelCase")]
+#[error("Pagination error")]
 pub struct PaginateError {
     pub max_size: usize,
 }
