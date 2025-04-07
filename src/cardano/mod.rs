@@ -27,6 +27,36 @@ pub struct Utxo {
     pub output: TransactionOutput,
 }
 
+impl Utxo {
+    pub fn transaction_id(&self) -> Hash<32> {
+        self.input.transaction_id
+    }
+
+    pub fn index(&self) -> u64 {
+        self.input.index
+    }
+
+    pub fn amount(&self) -> Coin {
+        match &self.output {
+            TransactionOutput::Legacy(output) => match output.amount {
+                LegacyValue::Coin(coin) => coin,
+                LegacyValue::Multiasset(coin, _) => coin,
+            },
+            TransactionOutput::PostAlonzo(output) => match output.value {
+                Value::Coin(coin) => coin,
+                Value::Multiasset(coin, _) => coin,
+            },
+        }
+    }
+
+    pub fn address(&self) -> String {
+        match &self.output {
+            TransactionOutput::Legacy(output) => output.address.to_string(),
+            TransactionOutput::PostAlonzo(output) => output.address.to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 #[cfg(feature = "transaction")]
 pub enum GroupUtxoError {
