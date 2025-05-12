@@ -51,6 +51,6 @@ mod wallet;
 pub use self::{
     cardano::Utxo,
     connected_wallet::{ConnectedWallet, NetworkId},
-    wallet::{Wallet, wallets},
+    wallet::{Wallet, lace, wallet, wallets},
 };
 pub use pallas_addresses::Address;

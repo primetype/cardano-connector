@@ -10,6 +10,22 @@ pub struct Wallet {
     cip30_wallet: ffi::Cip30Wallet,
 }
 
+/// attempt to find the wallet by name
+///
+/// This function is equivalent to
+///
+/// `wallets().into_iter().find(|wallet| wallet.name() == name)`
+///
+pub fn wallet(name: &str) -> Option<Wallet> {
+    let wallets = wallets();
+
+    wallets.into_iter().find(|wallet| wallet.name() == name)
+}
+
+pub fn lace() -> Option<Wallet> {
+    ffi::cip30::LACE.with(|opt| opt.clone().map(Wallet::new))
+}
+
 /// List the wallets that may be available.
 ///
 /// If the list is empty it means we didn't detect any wallets that we support
@@ -34,6 +50,10 @@ pub fn wallets() -> Vec<Wallet> {
 }
 
 impl Wallet {
+    fn new(cip30_wallet: ffi::Cip30Wallet) -> Self {
+        Wallet { cip30_wallet }
+    }
+
     /// get the name of the wallet connector application
     ///
     /// This can be `"lace"` for example.
