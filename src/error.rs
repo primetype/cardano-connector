@@ -22,6 +22,27 @@ pub struct APIError {
     pub info: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, thiserror::Error)]
+pub enum DataSignErrorCode {
+    #[error(
+        "Wallet could not sign the data (e.g. does not have the secret key associated with the address)"
+    )]
+    ProofGeneration,
+    #[error("Address was not a P2PK address and thus had no SK associated with it")]
+    AddressNotPK,
+    #[error("User declined to sign the data")]
+    UserDeclined,
+    #[error("Unknown error code `{0}'")]
+    Unknown(u64),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, thiserror::Error)]
+#[error("{code}. {info}.")]
+pub struct DataSignError {
+    pub code: DataSignErrorCode,
+    pub info: String,
+}
+
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, thiserror::Error, serde::Deserialize,
 )]
@@ -62,6 +83,36 @@ impl<'de> serde::Deserialize<'de> for APIErrorCode {
     }
 }
 
+impl<'de> serde::Deserialize<'de> for DataSignErrorCode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct Visitor;
+        impl serde::de::Visitor<'_> for Visitor {
+            type Value = DataSignErrorCode;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(formatter, "Expecting an integer DataSignErrorCode")
+            }
+
+            fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                match v {
+                    1 => Ok(DataSignErrorCode::ProofGeneration),
+                    2 => Ok(DataSignErrorCode::AddressNotPK),
+                    3 => Ok(DataSignErrorCode::UserDeclined),
+                    unknown => Ok(DataSignErrorCode::Unknown(unknown)),
+                }
+            }
+        }
+
+        deserializer.deserialize_u64(Visitor)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -85,6 +136,10 @@ mod tests {
         assert_eq!(
             serde_json::from_value::<APIErrorCode>(json! { -4 }).unwrap(),
             APIErrorCode::AccountChange
+        );
+        assert_eq!(
+            serde_json::from_value::<APIErrorCode>(json! { -42 }).unwrap(),
+            APIErrorCode::Unknown(-42)
         );
     }
 
@@ -136,6 +191,26 @@ mod tests {
                 code: APIErrorCode::AccountChange,
                 info: "Account has changed.".to_owned()
             }
+        );
+    }
+
+    #[test]
+    fn sign_data_error_code_json() {
+        assert_eq!(
+            serde_json::from_value::<DataSignErrorCode>(json! { 1 }).unwrap(),
+            DataSignErrorCode::ProofGeneration
+        );
+        assert_eq!(
+            serde_json::from_value::<DataSignErrorCode>(json! { 2 }).unwrap(),
+            DataSignErrorCode::AddressNotPK
+        );
+        assert_eq!(
+            serde_json::from_value::<DataSignErrorCode>(json! { 3 }).unwrap(),
+            DataSignErrorCode::UserDeclined
+        );
+        assert_eq!(
+            serde_json::from_value::<DataSignErrorCode>(json! { 42 }).unwrap(),
+            DataSignErrorCode::Unknown(42)
         );
     }
 }

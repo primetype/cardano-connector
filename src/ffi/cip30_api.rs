@@ -27,6 +27,17 @@ pub enum NetworkId {
 #[wasm_bindgen]
 extern "C" {
     #[derive(Clone, PartialEq)]
+    pub type DataSignature;
+
+    #[wasm_bindgen(method, getter, js_name = "signature")]
+    pub fn signature(this: &DataSignature) -> String;
+    #[wasm_bindgen(method, getter, js_name = "key")]
+    pub fn key(this: &DataSignature) -> String;
+}
+
+#[wasm_bindgen]
+extern "C" {
+    #[derive(Clone, PartialEq)]
     pub type Cip30Api;
 
     #[wasm_bindgen(method, catch, js_name = "getExtensions")]
@@ -102,6 +113,13 @@ extern "C" {
         transaction: &str,
         partial_sign: bool,
     ) -> Result<JsString, JsValue>;
+
+    #[wasm_bindgen(method, catch, js_name = "signData")]
+    pub async fn sign_data(
+        this: &Cip30Api,
+        addr: &str,
+        data: &str,
+    ) -> Result<DataSignature, JsValue>;
 
     /// As wallets should already have this ability, we allow dApps to request
     /// that a transaction be sent through it. If the wallet accepts the

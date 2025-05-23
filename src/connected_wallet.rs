@@ -4,7 +4,7 @@ use crate::{
     error::{APIError, APIErrorCode, PaginateError},
     ffi::{
         self,
-        cip30_api::{self, Paginate},
+        cip30_api::{self, DataSignature, Paginate},
     },
 };
 use core::fmt;
@@ -330,6 +330,33 @@ impl ConnectedWallet {
         }
     }
 
+    pub async fn sign_data(
+        &self,
+        address: &Address,
+        payload: impl AsRef<[u8]>,
+    ) -> Result<SignedData, APIError> {
+        // encode the payload in hexadecimal as required by the CIP-30 api
+        let address = address.to_hex();
+        let payload = hex::encode(payload);
+
+        // sign the payload using the connected wallet
+        match self.cip30_api.sign_data(&address, &payload).await {
+            Ok(signature) => SignedData::try_from(signature),
+            Err(error) => {
+                // TODO: handle signature error
+
+                serde_wasm_bindgen::from_value(error.clone())
+                    .map_err(|decode_error| APIError {
+                        code: APIErrorCode::InternalError,
+                        info: format!(
+                            "Couldn't decode the error content: {decode_error} ({error:?})"
+                        ),
+                    })
+                    .and_then(Err)
+            }
+        }
+    }
+
     /// sign the given transaction
     pub async fn sign_tx(
         &self,
@@ -375,5 +402,183 @@ impl ConnectedWallet {
                 })
                 .and_then(Err),
         }
+    }
+}
+
+pub struct SignedData {
+    pub key: [u8; 32],
+    pub signature: [u8; 64],
+    pub signed_data: Vec<u8>,
+    pub address: Vec<u8>,
+}
+
+fn cbor_to_api(error: cbor_event::Error) -> APIError {
+    APIError {
+        code: APIErrorCode::Unknown(42),
+        info: format!("{error}"),
+    }
+}
+
+fn extract_address_from_protected_header(bytes: &[u8]) -> Result<Vec<u8>, APIError> {
+    use cbor_event::{Deserialize as _, Len, Value, de::Deserializer};
+
+    let mut cbor = Deserializer::from(bytes);
+
+    let len = cbor.map().map_err(cbor_to_api)?;
+    let mut read = 0;
+
+    while match len {
+        Len::Len(n) => read < n,
+        Len::Indefinite => true,
+    } {
+        let key = Value::deserialize(&mut cbor).map_err(cbor_to_api)?;
+
+        if key == Value::Special(cbor_event::Special::Break) {
+            break;
+        } else if let Value::Text(key) = key {
+            if key == "address" {
+                // don't dwell, we can already return and stop there
+                return cbor.bytes().map_err(cbor_to_api);
+            }
+        } else {
+            // ignore the value and move to the next entry
+            let _value = Value::deserialize(&mut cbor).map_err(cbor_to_api)?;
+        }
+
+        read += 1;
+    }
+
+    Err(APIError {
+        code: APIErrorCode::Unknown(42),
+        info: "Invalid cbor, missing address".to_owned(),
+    })
+}
+
+fn extract_cose_key(bytes: &[u8]) -> Result<[u8; 32], APIError> {
+    use cbor_event::{Deserialize as _, Len, Value, de::Deserializer};
+
+    let mut cbor = Deserializer::from(bytes);
+
+    let len = cbor.map().map_err(cbor_to_api)?;
+    let mut read = 0;
+
+    while match len {
+        Len::Len(n) => read < n,
+        Len::Indefinite => true,
+    } {
+        let key = Value::deserialize(&mut cbor).map_err(cbor_to_api)?;
+
+        if key == Value::Special(cbor_event::Special::Break) {
+            break;
+        } else if Value::I64(-2) == key {
+            // don't dwell, we can already return and stop there
+            let mut key = [0; 32];
+            let key_bytes = cbor.bytes().map_err(cbor_to_api)?;
+            assert_eq!(key_bytes.len(), 32);
+            key.copy_from_slice(&key_bytes);
+            return Ok(key);
+        } else {
+            // ignore the value and move to the next entry
+            let _value = Value::deserialize(&mut cbor).map_err(cbor_to_api)?;
+        }
+
+        read += 1;
+    }
+
+    Err(APIError {
+        code: APIErrorCode::Unknown(42),
+        info: "Invalid cbor, missing key".to_owned(),
+    })
+}
+
+fn decode_cose_sig1(bytes: &[u8]) -> Result<SignedData, APIError> {
+    use cbor_event::{Deserialize as _, Len, Value, de::Deserializer, se::Serializer};
+
+    let mut cbor = Deserializer::from(bytes);
+
+    let _len = cbor.array().map_err(cbor_to_api)?;
+
+    let protected_header = cbor.bytes().map_err(cbor_to_api)?;
+    let address = extract_address_from_protected_header(&protected_header)?;
+
+    // unprotected
+    let () = cbor
+        .map_with(|cbor| {
+            let _key = Value::deserialize(cbor)?;
+            let _value = Value::deserialize(cbor)?;
+            Ok(())
+        })
+        .map_err(cbor_to_api)?;
+
+    let data = cbor.bytes().map_err(cbor_to_api)?;
+
+    let signature_bytes = cbor.bytes().map_err(cbor_to_api)?;
+    assert_eq!(signature_bytes.len(), 64);
+    let mut signature = [0; 64];
+    signature.copy_from_slice(&signature_bytes);
+
+    let mut signed_data = Serializer::new_vec();
+
+    signed_data.write_array(Len::Len(4)).map_err(cbor_to_api)?;
+    signed_data.write_text("Signature1").map_err(cbor_to_api)?;
+    signed_data
+        .write_bytes(&protected_header)
+        .map_err(cbor_to_api)?;
+    signed_data.write_bytes([]).map_err(cbor_to_api)?; // external aad empty
+    signed_data.write_bytes(data).map_err(cbor_to_api)?;
+
+    let signed_data = signed_data.finalize();
+
+    Ok(SignedData {
+        key: [0; 32],
+        signature,
+        signed_data,
+        address,
+    })
+}
+
+impl SignedData {
+    fn try_from(signature: DataSignature) -> Result<Self, APIError> {
+        Self::from_bytes(&signature.key(), &signature.signature())
+    }
+
+    fn from_bytes(key_bytes: &str, signature_bytes: &str) -> Result<Self, APIError> {
+        let signature = hex::decode(signature_bytes).map_err(|decode_error| APIError {
+            code: APIErrorCode::InternalError,
+            info: format!("Couldn't decode the signature bytes: {decode_error}"),
+        })?;
+        let key = hex::decode(key_bytes).map_err(|decode_error| APIError {
+            code: APIErrorCode::InternalError,
+            info: format!("Couldn't decode the key bytes: {decode_error}"),
+        })?;
+
+        let key = extract_cose_key(&key)?;
+        Ok(Self {
+            key,
+            ..decode_cose_sig1(&signature)?
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const COSE_KEY: &str = "a50101025839012abad624652d7b0fa0d00744a767b09dd0c9e8ef890966103802be7875d8bdc2a0facf8b85d2457c2417098703cf29067cea3eec03071f6e0327200621582074647c101ed98ade960ebad955f60961d1fcf77cb8a0bac9d6b778227685d1ae";
+    const COSE_SIG: &str = "845882a30127045839012abad624652d7b0fa0d00744a767b09dd0c9e8ef890966103802be7875d8bdc2a0facf8b85d2457c2417098703cf29067cea3eec03071f6e67616464726573735839012abad624652d7b0fa0d00744a767b09dd0c9e8ef890966103802be7875d8bdc2a0facf8b85d2457c2417098703cf29067cea3eec03071f6ea166686173686564f4446461746158402b45771561fdb6041326331a101a99d4bfe4f1a5c5b007f3d2f4f2e7f3f34d45aa5fedcd3f520e1799974c707996475693170531e2ad4a05ece3beb456f35a0f";
+
+    #[test]
+    fn signed_data_from_bytes() {
+        let result = SignedData::from_bytes(COSE_KEY, COSE_SIG).unwrap();
+
+        dbg!(hex::encode(&result.key));
+        dbg!(hex::encode(&result.signature));
+        dbg!(hex::encode(&result.signed_data));
+
+        assert!(cryptoxide::ed25519::verify(
+            &result.signed_data,
+            &result.key,
+            &result.signature
+        ));
     }
 }
