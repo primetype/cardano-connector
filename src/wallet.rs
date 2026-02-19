@@ -32,12 +32,32 @@ pub fn lace() -> Option<Wallet> {
 /// and support CIP30. However it is possible we are simply missing this wallet
 /// and wallets are welcomed to add support.
 ///
+///
+/// Alternatively, it is also possible the wallets were not injected yet by the
+/// extensions. You should make sure the page is loaded fully before calling this
+/// function (or do refresh the value from time to time).
+///
 pub fn wallets() -> Vec<Wallet> {
     ffi::cip30::WALLETS.with(|wallets| {
         let mut vec = Vec::new();
 
-        if wallets.is_object() {
-            for element in js_sys::Object::values(wallets) {
+        // Try to refresh the wallets from window.cardano in case they were loaded after initial check
+        let fresh_wallets = js_sys::Reflect::get(
+            &js_sys::global(),
+            &wasm_bindgen::JsValue::from_str("window"),
+        )
+        .ok()
+        .and_then(|win| {
+            js_sys::Reflect::get(&win, &wasm_bindgen::JsValue::from_str("cardano")).ok()
+        })
+        .unwrap_or_else(|| wallets.clone().into());
+
+        if fresh_wallets.is_object() {
+            let fresh_wallets_obj: js_sys::Object = fresh_wallets.into();
+            for element in js_sys::Object::values(&fresh_wallets_obj) {
+                if !looks_like_cip30_wallet(&element) {
+                    continue;
+                }
                 let cip30_wallet = ffi::Cip30Wallet::from(element);
                 let wallet = Wallet { cip30_wallet };
 
@@ -47,6 +67,32 @@ pub fn wallets() -> Vec<Wallet> {
 
         vec
     })
+}
+
+fn looks_like_cip30_wallet(value: &JsValue) -> bool {
+    if !value.is_object() {
+        return false;
+    }
+
+    let has_string_property = |prop: &str| {
+        js_sys::Reflect::get(value, &JsValue::from_str(prop))
+            .ok()
+            .and_then(|v| v.as_string())
+            .is_some()
+    };
+
+    let has_function_property = |prop: &str| {
+        js_sys::Reflect::get(value, &JsValue::from_str(prop))
+            .ok()
+            .map(|v| v.is_function())
+            .unwrap_or(false)
+    };
+
+    has_string_property("name")
+        && has_string_property("apiVersion")
+        && has_string_property("icon")
+        && has_function_property("enable")
+        && has_function_property("isEnabled")
 }
 
 impl Wallet {
