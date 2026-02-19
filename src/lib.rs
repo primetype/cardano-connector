@@ -49,7 +49,9 @@ pub mod ffi;
 mod wallet;
 
 pub use self::{
-    cardano::Utxo,
+    cardano::{
+        AssetName, Coin, Hash, Multiasset, PolicyId, PositiveCoin, TxHash, Utxo, Value, lovelace_of,
+    },
     connected_wallet::{ConnectedWallet, NetworkId},
     wallet::{Wallet, lace, wallet, wallets},
 };

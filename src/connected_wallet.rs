@@ -1,6 +1,6 @@
 use crate::{
     Address, Wallet,
-    cardano::{Coin, Hash, TransactionBody, Tx, Utxo, Value, WitnessSet},
+    cardano::{Hash, TransactionBody, Tx, Utxo, Value, WitnessSet},
     error::{APIError, APIErrorCode, PaginateError},
     ffi::{
         self,
@@ -125,8 +125,14 @@ impl ConnectedWallet {
         }
     }
 
-    /// get the [`Coin`] balance of this wallet
-    pub async fn balance(&self) -> Result<Coin, APIError> {
+    /// Get the total balance of this wallet as a [`Value`].
+    ///
+    /// For ADA-only wallets this returns [`Value::Coin`].
+    /// For wallets holding native tokens this returns [`Value::Multiasset`].
+    ///
+    /// The underlying CIP-30 `api.getBalance()` call returns a hex-encoded CBOR
+    /// value where `value = coin / [coin, multiasset]`.
+    pub async fn balance(&self) -> Result<Value, APIError> {
         match self.cip30_api.balance().await {
             Ok(balance) => {
                 let Some(balance_hex) = balance.as_string() else {
@@ -135,16 +141,7 @@ impl ConnectedWallet {
                         info: format!("Unknown balance: {balance:?}"),
                     });
                 };
-
-                let balance_cbor = hex::decode(&balance_hex).map_err(|error| APIError {
-                    code: APIErrorCode::InternalError,
-                    info: format!("Invalid balance `{balance_hex:?}': {error}"),
-                })?;
-
-                pallas_codec::minicbor::decode(&balance_cbor).map_err(|error| APIError {
-                    code: APIErrorCode::InternalError,
-                    info: format!("Invalid balance `{balance_cbor:?}': {error}"),
-                })
+                decode_balance_value(&balance_hex)
             }
             Err(error) => serde_wasm_bindgen::from_value(error)
                 .map_err(|decode_error| APIError {
@@ -405,6 +402,18 @@ impl ConnectedWallet {
     }
 }
 
+fn decode_balance_value(balance_hex: &str) -> Result<Value, APIError> {
+    let balance_cbor = hex::decode(balance_hex).map_err(|error| APIError {
+        code: APIErrorCode::InternalError,
+        info: format!("Invalid balance hex `{balance_hex}': {error}"),
+    })?;
+
+    pallas_codec::minicbor::decode::<Value>(&balance_cbor).map_err(|error| APIError {
+        code: APIErrorCode::InternalError,
+        info: format!("Invalid balance CBOR `{balance_hex}': {error}"),
+    })
+}
+
 pub struct SignedData {
     pub key: [u8; 32],
     pub signature: [u8; 64],
@@ -563,9 +572,34 @@ impl SignedData {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cardano::{AssetName, Multiasset, NonEmptyKeyValuePairs, PolicyId, PositiveCoin};
 
     const COSE_KEY: &str = "a50101025839012abad624652d7b0fa0d00744a767b09dd0c9e8ef890966103802be7875d8bdc2a0facf8b85d2457c2417098703cf29067cea3eec03071f6e0327200621582074647c101ed98ade960ebad955f60961d1fcf77cb8a0bac9d6b778227685d1ae";
     const COSE_SIG: &str = "845882a30127045839012abad624652d7b0fa0d00744a767b09dd0c9e8ef890966103802be7875d8bdc2a0facf8b85d2457c2417098703cf29067cea3eec03071f6e67616464726573735839012abad624652d7b0fa0d00744a767b09dd0c9e8ef890966103802be7875d8bdc2a0facf8b85d2457c2417098703cf29067cea3eec03071f6ea166686173686564f4446461746158402b45771561fdb6041326331a101a99d4bfe4f1a5c5b007f3d2f4f2e7f3f34d45aa5fedcd3f520e1799974c707996475693170531e2ad4a05ece3beb456f35a0f";
+
+    #[test]
+    fn decode_balance_coin() {
+        let balance_hex = hex::encode(pallas_codec::minicbor::to_vec(Value::Coin(42)).unwrap());
+
+        let balance = decode_balance_value(&balance_hex).unwrap();
+
+        assert_eq!(balance, Value::Coin(42));
+    }
+
+    #[test]
+    fn decode_balance_multiasset() {
+        let policy_id = PolicyId::from([1; 28]);
+        let asset_name = AssetName::from(vec![2]);
+        let token_amount = PositiveCoin::try_from(1).unwrap();
+        let assets = NonEmptyKeyValuePairs::from_vec(vec![(asset_name, token_amount)]).unwrap();
+        let multiasset = Multiasset::from_vec(vec![(policy_id, assets)]).unwrap();
+        let value = Value::Multiasset(99, multiasset);
+        let balance_hex = hex::encode(pallas_codec::minicbor::to_vec(value.clone()).unwrap());
+
+        let balance = decode_balance_value(&balance_hex).unwrap();
+
+        assert_eq!(balance, value);
+    }
 
     #[test]
     fn signed_data_from_bytes() {

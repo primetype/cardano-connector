@@ -15,6 +15,8 @@ use std::collections::HashMap;
 #[cfg(feature = "transaction")]
 use thiserror::Error;
 
+pub type TxHash = Hash<32>;
+
 /// decode the CBOR encoded UTxO as returned from the CIP30 getUtxos
 /// API.
 #[derive(Debug, PartialEq, Eq, Clone, pallas_codec::minicbor::Decode)]
@@ -48,11 +50,50 @@ impl Utxo {
         }
     }
 
+    /// Return the full [`Value`] held by this UTxO, including native assets.
+    pub fn value(&self) -> Value {
+        match &self.output {
+            TransactionOutput::Legacy(output) => match &output.amount {
+                LegacyValue::Coin(coin) => Value::Coin(*coin),
+                LegacyValue::Multiasset(coin, multiasset) => {
+                    let converted_assets = multiasset
+                        .iter()
+                        .filter_map(|(policy, assets)| {
+                            let converted_assets = assets
+                                .iter()
+                                .filter_map(|(asset_name, amount)| {
+                                    PositiveCoin::try_from(*amount)
+                                        .ok()
+                                        .map(|amount| (asset_name.clone(), amount))
+                                })
+                                .collect::<Vec<_>>();
+                            NonEmptyKeyValuePairs::from_vec(converted_assets)
+                                .map(|converted_assets| (*policy, converted_assets))
+                        })
+                        .collect::<Vec<_>>();
+
+                    match Multiasset::from_vec(converted_assets) {
+                        Some(multiasset) => Value::Multiasset(*coin, multiasset),
+                        None => Value::Coin(*coin),
+                    }
+                }
+            },
+            TransactionOutput::PostAlonzo(output) => output.value.clone(),
+        }
+    }
+
     pub fn address(&self) -> Result<Address, pallas_addresses::Error> {
         match &self.output {
             TransactionOutput::Legacy(output) => Address::from_bytes(&output.address),
             TransactionOutput::PostAlonzo(output) => Address::from_bytes(&output.address),
         }
+    }
+}
+
+/// Extract lovelace from a [`Value`], ignoring native assets.
+pub fn lovelace_of(value: &Value) -> Coin {
+    match value {
+        Value::Coin(coin) | Value::Multiasset(coin, _) => *coin,
     }
 }
 
