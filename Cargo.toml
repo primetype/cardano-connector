@@ -1,6 +1,6 @@
 [package]
 name = "cardano-connector"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Nicolas Di Prima <nicolas@primetype.co.uk>"]
 edition = "2024"
 description = "Platform for implementing Cardano Wallet connector to run in web browsers."
